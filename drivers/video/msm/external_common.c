@@ -756,12 +756,12 @@ static DEVICE_ATTR(format_3d, S_IRUGO | S_IWUSR | S_IWGRP,
 	hdmi_3d_rda_format_3d, hdmi_3d_wta_format_3d);
 #endif
 static DEVICE_ATTR(hdmi_primary, S_IRUGO, hdmi_common_rda_hdmi_primary, NULL);
-static DEVICE_ATTR(audio_data_block, S_IRUGO, hdmi_common_rda_audio_data_block,
-	NULL);
-static DEVICE_ATTR(spkr_alloc_data_block, S_IRUGO,
-	hdmi_common_rda_spkr_alloc_data_block, NULL);
-static DEVICE_ATTR(audio_caps, S_IRUGO | S_IWUSR, hdmi_common_rda_audio_caps,
-	hdmi_common_wta_audio_caps);
+//static DEVICE_ATTR(audio_data_block, S_IRUGO, hdmi_common_rda_audio_data_block,
+//	NULL);
+//static DEVICE_ATTR(spkr_alloc_data_block, S_IRUGO,
+//	hdmi_common_rda_spkr_alloc_data_block, NULL);
+//static DEVICE_ATTR(audio_caps, S_IRUGO | S_IWUSR, hdmi_common_rda_audio_caps,
+//	hdmi_common_wta_audio_caps);
 
 static struct attribute *external_common_fs_attrs[] = {
 	&dev_attr_video_mode.attr,
