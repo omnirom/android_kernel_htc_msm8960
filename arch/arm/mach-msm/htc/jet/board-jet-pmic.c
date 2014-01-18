@@ -14,7 +14,7 @@
 #include <mach/gpio.h>
 #include <mach/gpiomux.h>
 #include <mach/restart.h>
-#include "devices.h"
+#include "../../devices.h"
 #include "board-jet.h"
 
 extern unsigned int system_rev;

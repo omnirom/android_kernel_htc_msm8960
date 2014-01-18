@@ -126,6 +126,11 @@ static void hci_ev_rt_plus(struct iris_device *radio,
 		struct rds_grp_data rds_buf);
 static void hci_ev_ert(struct iris_device *radio);
 static int update_spur_table(struct iris_device *radio);
+static int initialise_recv(struct iris_device *radio);
+static int initialise_trans(struct iris_device *radio);
+static int is_enable_rx_possible(struct iris_device *radio);
+static int is_enable_tx_possible(struct iris_device *radio);
+
 static struct v4l2_queryctrl iris_v4l2_queryctrl[] = {
 	{
 	.id	= V4L2_CID_AUDIO_VOLUME,
@@ -1633,13 +1638,16 @@ static void hci_cc_fm_disable_rsp(struct radio_hci_dev *hdev,
 	__u8 status = *((__u8 *) skb->data);
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 
-	if (status)
-		return;
-	if ((radio->mode != FM_CALIB) && (radio->mode != FM_OFF))
+	if ((radio->mode == FM_TURNING_OFF) && (status == 0)) {
 		iris_q_event(radio, IRIS_EVT_RADIO_DISABLED);
-	radio->mode = FM_OFF;
-
-	radio_hci_req_complete(hdev, status);
+		radio_hci_req_complete(hdev, status);
+		radio->mode = FM_OFF;
+	} else if (radio->mode == FM_CALIB) {
+		radio_hci_req_complete(hdev, status);
+	} else if ((radio->mode == FM_RECV) || (radio->mode == FM_TRANS)) {
+		iris_q_event(radio, IRIS_EVT_RADIO_DISABLED);
+		radio->mode = FM_OFF;
+	}
 }
 
 static void hci_cc_conf_rsp(struct radio_hci_dev *hdev, struct sk_buff *skb)
@@ -1673,11 +1681,18 @@ static void hci_cc_fm_enable_rsp(struct radio_hci_dev *hdev,
 	struct hci_fm_conf_rsp  *rsp = (void *)skb->data;
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 
-	if (rsp->status)
+	if (rsp->status) {
+		radio_hci_req_complete(hdev, rsp->status);
 		return;
-	if (radio->mode != FM_CALIB)
-		iris_q_event(radio, IRIS_EVT_RADIO_READY);
+	}
 
+	if (radio->mode == FM_RECV_TURNING_ON) {
+		radio->mode = FM_RECV;
+		iris_q_event(radio, IRIS_EVT_RADIO_READY);
+	} else if(radio->mode == FM_TRANS_TURNING_ON) {
+		radio->mode = FM_TRANS;
+		iris_q_event(radio, IRIS_EVT_RADIO_READY);
+	}
 	radio_hci_req_complete(hdev, rsp->status);
 }
 
@@ -2420,9 +2435,11 @@ static void hci_ev_af_list(struct radio_hci_dev *hdev,
 		FMDERR("AF list size received more than available size");
 		return;
 	}
-	memcpy(&ev.af_list[0], &skb->data[AF_LIST_OFFSET], ev.af_size);
+	memcpy(&ev.af_list[0], &skb->data[AF_LIST_OFFSET],
+					ev.af_size * sizeof(int));
 	iris_q_event(radio, IRIS_EVT_NEW_AF_LIST);
-	iris_q_evt_data(radio, (char *)&ev, sizeof(ev), IRIS_BUF_AF_LIST);
+	iris_q_evt_data(radio, (char *)&ev, (7 + ev.af_size * sizeof(int)),
+							IRIS_BUF_AF_LIST);
 }
 
 static void hci_ev_rds_lock_status(struct radio_hci_dev *hdev,
@@ -2692,7 +2709,9 @@ static int iris_do_calibration(struct iris_device *radio)
 			radio->fm_hdev);
 	if (retval < 0)
 		FMDERR("Disable Failed after calibration %d", retval);
-	radio->mode = FM_TURNING_OFF;
+	else
+		radio->mode = FM_OFF;
+
 	return retval;
 }
 static int iris_vidioc_g_ctrl(struct file *file, void *priv,
@@ -3009,7 +3028,7 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 			struct v4l2_ext_controls *ctrl)
 {
 	int retval = 0;
-	int bytes_to_copy;
+	size_t bytes_to_copy;
 	struct hci_fm_tx_ps tx_ps;
 	struct hci_fm_tx_rt tx_rt;
 	struct hci_fm_def_data_wr_req default_data;
@@ -3018,14 +3037,20 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 	struct iris_device *radio = video_get_drvdata(video_devdata(file));
 	char *data = NULL;
 
+	if ((ctrl == NULL) || (ctrl->controls == NULL)
+		|| (ctrl->count == 0)) {
+		retval = -EINVAL;
+		return retval;
+	}
+
 	switch ((ctrl->controls[0]).id) {
 	case V4L2_CID_RDS_TX_PS_NAME:
 		FMDBG("In V4L2_CID_RDS_TX_PS_NAME\n");
 		/*Pass a sample PS string */
 
 		memset(tx_ps.ps_data, 0, MAX_PS_LENGTH);
-		bytes_to_copy = min((int)(ctrl->controls[0]).size,
-			MAX_PS_LENGTH);
+		bytes_to_copy = min(ctrl->controls[0].size,
+			(size_t)MAX_PS_LENGTH);
 		data = (ctrl->controls[0]).string;
 
 		if (copy_from_user(tx_ps.ps_data,
@@ -3042,7 +3067,7 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		break;
 	case V4L2_CID_RDS_TX_RADIO_TEXT:
 		bytes_to_copy =
-		    min((int)(ctrl->controls[0]).size, MAX_RT_LENGTH);
+		    min((ctrl->controls[0]).size, (size_t)MAX_RT_LENGTH);
 		data = (ctrl->controls[0]).string;
 
 		memset(tx_rt.rt_data, 0, MAX_RT_LENGTH);
@@ -3174,82 +3199,60 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 	case V4L2_CID_PRIVATE_IRIS_STATE:
 		switch (ctrl->value) {
 		case FM_RECV:
+			if (is_enable_rx_possible(radio) != 0)
+				return -EINVAL;
+			radio->mode = FM_RECV_TURNING_ON;
 			retval = hci_cmd(HCI_FM_ENABLE_RECV_CMD,
 							 radio->fm_hdev);
 			if (retval < 0) {
 				FMDERR("Error while enabling RECV FM"
 							" %d\n", retval);
+				radio->mode = FM_OFF;
 				return retval;
+			} else {
+				initialise_recv(radio);
 			}
-			radio->mode = FM_RECV;
-			radio->mute_mode.soft_mute = CTRL_ON;
-			retval = hci_set_fm_mute_mode(
-						&radio->mute_mode,
-							radio->fm_hdev);
-			if (retval < 0) {
-				FMDERR("Failed to enable Smute\n");
-				return retval;
-			}
-			radio->stereo_mode.stereo_mode = CTRL_OFF;
-			radio->stereo_mode.sig_blend = CTRL_ON;
-			radio->stereo_mode.intf_blend = CTRL_ON;
-			radio->stereo_mode.most_switch = CTRL_ON;
-			retval = hci_set_fm_stereo_mode(
-						&radio->stereo_mode,
-							radio->fm_hdev);
-			if (retval < 0) {
-				FMDERR("Failed to set stereo mode\n");
-				return retval;
-			}
-			radio->event_mask = SIG_LEVEL_INTR |
-						RDS_SYNC_INTR | AUDIO_CTRL_INTR;
-			retval = hci_conf_event_mask(&radio->event_mask,
-							radio->fm_hdev);
-			if (retval < 0) {
-				FMDERR("Enable Async events failed");
-				return retval;
-			}
-			retval = hci_cmd(HCI_FM_GET_RECV_CONF_CMD,
-						radio->fm_hdev);
-			if (retval < 0)
-				FMDERR("Failed to get the Recv Config\n");
 			break;
 		case FM_TRANS:
+			if (is_enable_tx_possible(radio) != 0)
+				return -EINVAL;
+			radio->mode = FM_TRANS_TURNING_ON;
 			retval = hci_cmd(HCI_FM_ENABLE_TRANS_CMD,
 							 radio->fm_hdev);
 			if (retval < 0) {
 				FMDERR("Error while enabling TRANS FM"
 							" %d\n", retval);
+				radio->mode = FM_OFF;
 				return retval;
+			} else {
+				initialise_trans(radio);
 			}
-			radio->mode = FM_TRANS;
-			retval = hci_cmd(HCI_FM_GET_TX_CONFIG, radio->fm_hdev);
-			if (retval < 0)
-				FMDERR("get frequency failed %d\n", retval);
 			break;
 		case FM_OFF:
 			radio->spur_table_size = 0;
 			switch (radio->mode) {
 			case FM_RECV:
+				radio->mode = FM_TURNING_OFF;
 				retval = hci_cmd(HCI_FM_DISABLE_RECV_CMD,
 						radio->fm_hdev);
 				if (retval < 0) {
 					FMDERR("Err on disable recv FM"
 						   " %d\n", retval);
+					radio->mode = FM_RECV;
 					return retval;
 				}
-				radio->mode = FM_TURNING_OFF;
 				break;
 			case FM_TRANS:
+				radio->mode = FM_TURNING_OFF;
 				retval = hci_cmd(HCI_FM_DISABLE_TRANS_CMD,
 						radio->fm_hdev);
 
 				if (retval < 0) {
 					FMDERR("Err disabling trans FM"
 						" %d\n", retval);
+					radio->mode = FM_TRANS;
 					return retval;
 				}
-				radio->mode = FM_TURNING_OFF;
 				break;
 			default:
 				retval = -EINVAL;
@@ -3486,13 +3489,21 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RIVA_POKE:
 		if (radio->riva_data_req.cmd_params.length <= MAX_RIVA_PEEK_RSP_SIZE) {
-			memcpy(radio->riva_data_req.data, (void *)ctrl->value,
+			retval = copy_from_user(radio->riva_data_req.data,
+						(void *)ctrl->value,
 						radio->riva_data_req.cmd_params.length);
-			radio->riva_data_req.cmd_params.subopcode = RIVA_POKE_OPCODE;
-			retval = hci_poke_data(&radio->riva_data_req , radio->fm_hdev);
+			if (retval == 0) {
+				radio->riva_data_req.cmd_params.subopcode =
+									RIVA_POKE_OPCODE;
+				retval = hci_poke_data(&radio->riva_data_req,
+							radio->fm_hdev);
+			} else {
+				retval = -EINVAL;
+			}
 		} else {
 			FMDERR("Can not copy into driver's buffer. Length %d is more than"
-			 "the buffer size %d\n", ctrl->value, MAX_RIVA_PEEK_RSP_SIZE);
+			 "the buffer size %d\n", radio->riva_data_req.cmd_params.length,
+				MAX_RIVA_PEEK_RSP_SIZE);
 			retval = -EINVAL;
 		}
 		break;
@@ -4143,6 +4154,73 @@ static int iris_vidioc_querycap(struct file *file, void *priv,
 	return 0;
 }
 
+static int initialise_recv(struct iris_device *radio)
+{
+	int retval;
+
+	radio->mute_mode.soft_mute = CTRL_ON;
+	retval = hci_set_fm_mute_mode(&radio->mute_mode,
+					radio->fm_hdev);
+
+	if (retval < 0) {
+		FMDERR("Failed to enable Smute\n");
+		return retval;
+	}
+
+	radio->stereo_mode.stereo_mode = CTRL_OFF;
+	radio->stereo_mode.sig_blend = CTRL_ON;
+	radio->stereo_mode.intf_blend = CTRL_ON;
+	radio->stereo_mode.most_switch = CTRL_ON;
+	retval = hci_set_fm_stereo_mode(&radio->stereo_mode,
+						radio->fm_hdev);
+
+	if (retval < 0) {
+		FMDERR("Failed to set stereo mode\n");
+		return retval;
+	}
+
+	radio->event_mask = SIG_LEVEL_INTR | RDS_SYNC_INTR | AUDIO_CTRL_INTR;
+	retval = hci_conf_event_mask(&radio->event_mask, radio->fm_hdev);
+	if (retval < 0) {
+		FMDERR("Enable Async events failed");
+		return retval;
+	}
+
+	retval = hci_cmd(HCI_FM_GET_RECV_CONF_CMD, radio->fm_hdev);
+	if (retval < 0)
+		FMDERR("Failed to get the Recv Config\n");
+	return retval;
+}
+
+static int initialise_trans(struct iris_device *radio)
+{
+
+	int retval = hci_cmd(HCI_FM_GET_TX_CONFIG, radio->fm_hdev);
+	if (retval < 0)
+		FMDERR("get frequency failed %d\n", retval);
+
+	return retval;
+}
+
+static int is_enable_rx_possible(struct iris_device *radio)
+{
+	int retval = 1;
+
+	if (radio->mode == FM_OFF || radio->mode == FM_RECV)
+		retval = 0;
+
+	return retval;
+}
+
+static int is_enable_tx_possible(struct iris_device *radio)
+{
+	int retval = 1;
+
+	if (radio->mode == FM_OFF || radio->mode == FM_TRANS)
+		retval = 0;
+
+	return retval;
+}
 
 static const struct v4l2_ioctl_ops iris_ioctl_ops = {
 	.vidioc_querycap              = iris_vidioc_querycap,
@@ -4226,11 +4304,11 @@ static int __init iris_probe(struct platform_device *pdev)
 		if (kfifo_alloc_rc != 0) {
 			FMDERR("failed allocating buffers %d\n",
 				   kfifo_alloc_rc);
-			for (; i > -1; i--) {
+			for (; i > -1; i--)
 				kfifo_free(&radio->data_buf[i]);
-				kfree(radio);
-				return -ENOMEM;
-			}
+			video_device_release(radio->videodev);
+			kfree(radio);
+			return -ENOMEM;
 		}
 	}
 
@@ -4258,8 +4336,17 @@ static int __init iris_probe(struct platform_device *pdev)
 	} else {
 		priv_videodev = kzalloc(sizeof(struct video_device),
 			GFP_KERNEL);
-		memcpy(priv_videodev, radio->videodev,
-			sizeof(struct video_device));
+		if (priv_videodev != NULL) {
+			memcpy(priv_videodev, radio->videodev,
+				sizeof(struct video_device));
+		} else {
+			video_unregister_device(radio->videodev);
+			video_device_release(radio->videodev);
+			for (; i > -1; i--)
+				kfifo_free(&radio->data_buf[i]);
+			kfree(radio);
+			return -ENOMEM;
+		}
 	}
 	return 0;
 }
