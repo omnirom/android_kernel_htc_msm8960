@@ -27,8 +27,8 @@
 #include <asm/mach-types.h>
 #include <mach/socinfo.h>
 #include <linux/mfd/wcd9xxx/core.h>
-#include "../../../sound/soc/codecs/wcd9310.h"
-#include "../sound/soc/msm/msm-pcm-routing.h"
+#include "../../../../../sound/soc/codecs/wcd9310.h"
+#include "../../../../../sound/soc/msm/msm-pcm-routing.h"
 #include "board-jet.h"
 
 #include <mach/cable_detect.h>

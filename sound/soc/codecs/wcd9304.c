@@ -76,6 +76,7 @@ struct sitar_codec_dai_data {
 	u32 *ch_num;
 	u32 ch_act;
 	u32 ch_tot;
+	u32 bit_width;
 	u32 ch_mask;
 	wait_queue_head_t dai_wait;
 };
@@ -2292,6 +2293,7 @@ static int sitar_hph_pa_event(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct sitar_priv *sitar = snd_soc_codec_get_drvdata(codec);
 	u8 mbhc_micb_ctl_val;
+	static int hphlr_count;
 	pr_debug("%s: event = %d\n", __func__, event);
 
 	switch (event) {
@@ -2323,6 +2325,7 @@ static int sitar_hph_pa_event(struct snd_soc_dapm_widget *w,
 				 &sitar->hph_pa_dac_state);
 			clear_bit(SITAR_HPHL_DAC_OFF_ACK,
 				 &sitar->hph_pa_dac_state);
+			hphlr_count++;
 			if (sitar->hph_status & SND_JACK_OC_HPHL)
 				schedule_work(&sitar->hphlocp_work);
 		} else if (w->shift == 4) {
@@ -2330,17 +2333,19 @@ static int sitar_hph_pa_event(struct snd_soc_dapm_widget *w,
 				 &sitar->hph_pa_dac_state);
 			clear_bit(SITAR_HPHR_DAC_OFF_ACK,
 				 &sitar->hph_pa_dac_state);
+			hphlr_count++;
 			if (sitar->hph_status & SND_JACK_OC_HPHR)
 				schedule_work(&sitar->hphrocp_work);
 		}
-
-		SITAR_ACQUIRE_LOCK(sitar->codec_resource_lock);
-		sitar_codec_switch_micbias(codec, 0);
-		SITAR_RELEASE_LOCK(sitar->codec_resource_lock);
-
-		pr_debug("%s: sleep 10 ms after %s PA disable.\n", __func__,
-				w->name);
-		usleep_range(10000, 10000);
+		if (hphlr_count >= 2) {
+			SITAR_ACQUIRE_LOCK(sitar->codec_resource_lock);
+			sitar_codec_switch_micbias(codec, 0);
+			SITAR_RELEASE_LOCK(sitar->codec_resource_lock);
+			pr_debug("%s: sleep 10 ms after %s PA disable.\n",
+					__func__, w->name);
+			usleep_range(10000, 10000);
+			hphlr_count = 0;
+		}
 
 		if (sitar_is_line_pa_on(codec))
 			sitar_enable_classg(codec, true);
@@ -3492,6 +3497,26 @@ static int sitar_hw_params(struct snd_pcm_substream *substream,
 			snd_soc_update_bits(codec, SITAR_A_CDC_CLK_TX_I2S_CTL,
 						0x03, tx_fs_rate);
 		} else {
+			switch (params_format(params)) {
+			case SNDRV_PCM_FORMAT_S16_LE:
+				sitar->dai[dai->id - 1].bit_width = 16;
+				snd_soc_update_bits(codec,
+					SITAR_A_CDC_CONN_RX_SB_B1_CTL,
+					0xFF, 0xAA);
+				snd_soc_update_bits(codec,
+					SITAR_A_CDC_CONN_RX_SB_B2_CTL,
+					0x03, 0x02);
+				break;
+			case SNDRV_PCM_FORMAT_S24_LE:
+				sitar->dai[dai->id - 1].bit_width = 24;
+				snd_soc_update_bits(codec,
+					SITAR_A_CDC_CONN_RX_SB_B1_CTL,
+					0xFF, 0x00);
+				snd_soc_update_bits(codec,
+					SITAR_A_CDC_CONN_RX_SB_B2_CTL,
+					0x03, 0x00);
+				break;
+			}
 			sitar->dai[dai->id - 1].rate   = params_rate(params);
 		}
 	}
@@ -3690,10 +3715,15 @@ static int sitar_codec_enable_slimrx(struct snd_soc_dapm_widget *w,
 		}
 		if (sitar_p->dai[j].ch_act == sitar_p->dai[j].ch_tot) {
 			ret = sitar_codec_enable_chmask(sitar_p, event, j);
+
+			if (sitar_p->dai[j].bit_width == 0)
+				sitar_p->dai[j].bit_width = 16;
+
 			ret = wcd9xxx_cfg_slim_sch_rx(sitar,
 					sitar_p->dai[j].ch_num,
 					sitar_p->dai[j].ch_tot,
-					sitar_p->dai[j].rate);
+					sitar_p->dai[j].rate,
+					sitar_p->dai[j].bit_width);
 		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
