@@ -94,19 +94,19 @@
 #include <mach/htc_headset_pmic.h>
 #include <mach/cable_detect.h>
 
-#include "timer.h"
-#include "devices.h"
-#include "devices-msm8x60.h"
-#include "spm.h"
+#include "../../timer.h"
+#include "../../devices.h"
+#include "../../devices-msm8x60.h"
+#include "../../spm.h"
 #include "board-jet.h"
-#include "pm.h"
+#include "../../pm.h"
 #include <mach/cpuidle.h>
-#include "rpm_resources.h"
+#include "../../rpm_resources.h"
 #include <mach/mpm.h>
-#include "acpuclock.h"
-#include "rpm_log.h"
-#include "smd_private.h"
-#include "pm-boot.h"
+#include "../../acpuclock.h"
+#include "../../rpm_log.h"
+#include "../../smd_private.h"
+#include "../../pm-boot.h"
 
 #ifdef CONFIG_FB_MSM_HDMI_MHL
 #include <mach/mhl.h>
@@ -117,9 +117,9 @@
 #endif
 #include <mach/board_htc.h>
 #ifdef CONFIG_HTC_BATT_8960
-#include "mach/htc_battery_8960.h"
-#include "mach/htc_battery_cell.h"
-#include "linux/mfd/pm8xxx/pm8921-charger-htc.h"
+#include <mach/htc_battery_8960.h>
+#include <mach/htc_battery_cell.h>
+#include <linux/mfd/pm8xxx/pm8921-charger-htc.h>
 #endif
 
 #ifdef CONFIG_PERFLOCK
@@ -2324,7 +2324,7 @@ static struct cm3629_platform_data cm36282_pdata = {
 	.ps_conf2_val = CM3629_PS_ITB_1 | CM3629_PS_ITR_1 |
 		CM3629_PS2_INT_DIS | CM3629_PS1_INT_DIS,
 	.ps_conf3_val = CM3629_PS2_PROL_32,
-	.enable_polling_ignore = 1,
+	.dynamical_threshold = 1,
 	.mapping_table = cm3629_mapping_table,
 	.mapping_size = ARRAY_SIZE(cm3629_mapping_table),
 };

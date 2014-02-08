@@ -1,8 +1,8 @@
 #include <linux/gpio.h>
 #include <mach/gpio.h>
 #include <mach/panel_id.h>
-#include "../../../drivers/video/msm/msm_fb.h"
-#include "../../../drivers/video/msm/mipi_dsi.h"
+#include "../../../../../../drivers/video/msm/msm_fb.h"
+#include "../../../../../../drivers/video/msm/mipi_dsi.h"
 #include "../board-jet.h"
 #include "mipi_jet.h"
 
@@ -3147,38 +3147,38 @@ static int mipi_jet_lcd_off(struct platform_device *pdev)
 
 static unsigned char jet_shrink_pwm(int val)
 {
-	unsigned char shrink_br = BRI_SETTING_MAX;
-
 	if (val <= 0) {
-		shrink_br = 0;
-	} else if (val > 0 && (val < BRI_SETTING_MIN)) {
-		shrink_br = PWM_MIN;
-	} else if ((val >= BRI_SETTING_MIN) && (val <= BRI_SETTING_DEF)) {
-		shrink_br = (val - BRI_SETTING_MIN) * (PWM_DEFAULT - PWM_MIN) /
+		return 0;
+	} else if (val < BRI_SETTING_MIN) {
+		return PWM_MIN;
+	} else if (val <= BRI_SETTING_DEF) {
+		return (val - BRI_SETTING_MIN) * (PWM_DEFAULT - PWM_MIN) /
 			(BRI_SETTING_DEF - BRI_SETTING_MIN) + PWM_MIN;
-	} else if (val > BRI_SETTING_DEF && val <= BRI_SETTING_MAX) {
-		shrink_br = (val - BRI_SETTING_DEF) * (PWM_MAX - PWM_DEFAULT) /
+	} else if (val <= BRI_SETTING_MAX) {
+		return (val - BRI_SETTING_DEF) * (PWM_MAX - PWM_DEFAULT) /
 			(BRI_SETTING_MAX - BRI_SETTING_DEF) + PWM_DEFAULT;
-	} else if (val > BRI_SETTING_MAX)
-		shrink_br = PWM_MAX;
+	}
 
-	return shrink_br;
+	return PWM_MAX;
 }
 
 inline void mipi_dsi_set_backlight(struct msm_fb_data_type *mfd, int level)
 {
-	led_pwm1[1] = jet_shrink_pwm(mfd->bl_level);
+	led_pwm1[1] = jet_shrink_pwm(level);
 
-	if (mfd->bl_level == 0)
+	if (level == 0)
 		jet_send_display_cmds(disable_dim, ARRAY_SIZE(disable_dim));
 
 	jet_send_display_cmds(jet_cmd_backlight_cmds, jet_cmd_backlight_cmds_count);
 
-	bl_level_prevset = mfd->bl_level;
+	bl_level_prevset = level;
 }
 
 static void mipi_jet_set_backlight(struct msm_fb_data_type *mfd)
 {
+	if (bl_level_prevset == mfd->bl_level)
+		return;
+
 	mipi_dsi_set_backlight(mfd, mfd->bl_level);
 }
 
@@ -3192,13 +3192,20 @@ static void mipi_jet_per_panel_fcts_init(void)
 	jet_display_off_cmds_count = ARRAY_SIZE(sony_display_off_cmds);
 
 	if (panel_type == PANEL_ID_FIGHTER_LG_NT) {
+		pr_info("%s: PANEL_ID_FIGHTER_LG_NT", __func__);
+
 		jet_display_off_cmds = novatek_display_off_cmds;
 		jet_display_off_cmds_count = ARRAY_SIZE(novatek_display_off_cmds);
+
+		jet_video_on_cmds = novatek_display_off_cmds;
+		jet_video_on_cmds_count = ARRAY_SIZE(novatek_display_off_cmds);
 
 		jet_command_on_cmds = lg_novatek_cmd_on_cmds;
 		jet_command_on_cmds_count = ARRAY_SIZE(lg_novatek_cmd_on_cmds);
 	}
 	if (panel_type == PANEL_ID_JET_SONY_NT) {
+		pr_info("%s: PANEL_ID_JET_SONY_NT", __func__);
+
 		jet_video_on_cmds = sony_c1_video_on_cmds;
 		jet_video_on_cmds_count = ARRAY_SIZE(sony_c1_video_on_cmds);
 
@@ -3206,6 +3213,8 @@ static void mipi_jet_per_panel_fcts_init(void)
 		jet_command_on_cmds_count = ARRAY_SIZE(sony_c1_video_on_cmds);
 	}
 	else if (panel_type == PANEL_ID_JET_SONY_NT_C1) {
+		pr_info("%s: PANEL_ID_JET_SONY_NT_C1", __func__);
+
 		jet_video_on_cmds = sony_c1_video_on_cmds;
 		jet_video_on_cmds_count = ARRAY_SIZE(sony_c1_video_on_cmds);
 
@@ -3213,6 +3222,8 @@ static void mipi_jet_per_panel_fcts_init(void)
 		jet_command_on_cmds_count = ARRAY_SIZE(sony_c1_video_on_cmds);
 	}
 	else if (panel_type == PANEL_ID_JET_SONY_NT_C2) {
+		pr_info("%s: PANEL_ID_JET_SONY_NT_C2", __func__);
+
 		jet_video_on_cmds = sony_panel_video_mode_cmds_c2;
 		jet_video_on_cmds_count = ARRAY_SIZE(sony_panel_video_mode_cmds_c2);
 
@@ -3220,6 +3231,8 @@ static void mipi_jet_per_panel_fcts_init(void)
 		jet_command_on_cmds_count = ARRAY_SIZE(sony_panel_video_mode_cmds_c2);
 	}
 	else if (panel_type == PANEL_ID_JET_AUO_NT) {
+		pr_info("%s: PANEL_ID_JET_AUO_NT", __func__);
+
 		jet_video_on_cmds = auo_panel_video_mode_cmds;
 		jet_video_on_cmds_count = ARRAY_SIZE(auo_panel_video_mode_cmds);
 
@@ -3227,6 +3240,8 @@ static void mipi_jet_per_panel_fcts_init(void)
 		jet_command_on_cmds_count = ARRAY_SIZE(auo_panel_video_mode_cmds);
 	}
 	else if (panel_type == PANEL_ID_JET_AUO_NT_C2) {
+		pr_info("%s: PANEL_ID_JET_AUO_NT_C2", __func__);
+
 		jet_video_on_cmds = auo_panel_video_mode_cmds_c2;
 		jet_video_on_cmds_count = ARRAY_SIZE(auo_panel_video_mode_cmds_c2);
 
@@ -3234,6 +3249,8 @@ static void mipi_jet_per_panel_fcts_init(void)
 		jet_command_on_cmds_count = ARRAY_SIZE(auo_panel_video_mode_cmds_c2);
 	}
 	else if (panel_type == PANEL_ID_JET_AUO_NT_C3) {
+		pr_info("%s: PANEL_ID_JETAUO_NT_C3", __func__);
+
 		jet_video_on_cmds = auo_panel_video_mode_cmds_c3;
 		jet_video_on_cmds_count = ARRAY_SIZE(auo_panel_video_mode_cmds_c3);
 
@@ -3241,6 +3258,8 @@ static void mipi_jet_per_panel_fcts_init(void)
 		jet_command_on_cmds_count = ARRAY_SIZE(auo_panel_video_mode_cmds_c3);
 	}
 	else if (panel_type == PANEL_ID_JET_AUO_NT_C3_1) {
+		pr_info("%s: PANEL_ID_JET_AUO_NT_C3_1", __func__);
+
 		jet_video_on_cmds = auo_panel_video_mode_cmds_c3_1;
 		jet_video_on_cmds_count = ARRAY_SIZE(auo_panel_video_mode_cmds_c3_1);
 
