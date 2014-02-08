@@ -282,7 +282,7 @@ static void _check_if_freed(struct kgsl_iommu_device *iommu_dev,
 }
 
 static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
-	struct device *dev, unsigned long addr, int flags)
+	struct device *dev, unsigned long addr, int flags, void *token)
 {
 	int ret = 0;
 	struct kgsl_mmu *mmu;
@@ -295,7 +295,7 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	unsigned int no_page_fault_log = 0;
 	unsigned int curr_context_id = 0;
 	unsigned int curr_global_ts = 0;
-	static struct kgsl_context *context;
+	struct kgsl_context *context;
 	unsigned int pid;
 	unsigned int fsynr0, fsynr1;
 	int write;
@@ -377,6 +377,7 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 
 		if (ret < 0) {
 			KGSL_CORE_ERR("Invalid curr_global_ts = %d\n", curr_global_ts);
+			kgsl_context_put(context);
 			goto done;
 		}
 
@@ -655,7 +656,7 @@ void *kgsl_iommu_create_pagetable(void)
 		return NULL;
 	} else {
 		iommu_set_fault_handler(iommu_pt->domain,
-			kgsl_iommu_fault_handler);
+			kgsl_iommu_fault_handler, NULL);
 	}
 
 	return iommu_pt;

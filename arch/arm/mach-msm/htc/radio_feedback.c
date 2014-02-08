@@ -30,8 +30,8 @@
 #include <mach/msm_iomap.h>
 #include <linux/fcntl.h>
 
-#include "smd_private.h"
-#include "acpuclock.h"
+#include "../smd_private.h"
+#include "../acpuclock.h"
 
 #define RADIO_FEEDBACK_IOCTL_MAGIC	'p'
 #define RADIO_FEEDBACK_GET_CDLOG_INFO	_IOW(RADIO_FEEDBACK_IOCTL_MAGIC, 89, unsigned)

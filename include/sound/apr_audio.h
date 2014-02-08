@@ -304,14 +304,6 @@ struct afe_port_rtproxy_cfg {
 #define AFE_PORT_MULTI_CHAN_HDMI_AUDIO_IF_CONFIG	0x000100D9
 #define AFE_PORT_CMD_I2S_CONFIG	0x000100E7
 
-#define AFE_PARAM_ID_DEVICE_HW_DELAY     0x00010243
-#define AFE_API_VERSION_DEVICE_HW_DELAY  0x1
-
-struct afe_param_id_device_hw_delay_cfg {
-	uint32_t    device_hw_delay_minor_version;
-	uint32_t    delay_in_us;
-} __packed;
-
 union afe_port_config {
 	struct afe_port_pcm_cfg           pcm;
 	struct afe_port_mi2s_cfg          mi2s;
@@ -425,7 +417,6 @@ struct afe_param_payload {
 		struct afe_param_channels      channels;
 		struct afe_param_loopback_gain loopback_gain;
 		struct afe_param_loopback_cfg loopback_cfg;
-		struct afe_param_id_device_hw_delay_cfg hw_delay;
 	} __attribute__((packed)) param;
 } __attribute__ ((packed));
 
@@ -583,6 +574,21 @@ struct adm_multi_ch_copp_open_command {
 	u32 rate;
 	u8 dev_channel_mapping[8];
 } __packed;
+
+#define ADM_CMD_MULTI_CHANNEL_COPP_OPEN_V2               0x00010319
+struct adm_multi_ch_copp_open_command_v2 {
+	struct apr_hdr hdr;
+	u16 flags;
+	u16 mode; /* 1-RX, 2-Live TX, 3-Non Live TX */
+	u16 endpoint_id1;
+	u16 endpoint_id2;
+	u32 topology_id;
+	u16 channel_config;
+	u16 bit_width;
+	u32 rate;
+	u8 dev_channel_mapping[8];
+} __packed;
+
 #define ADM_CMD_MEMORY_MAP				0x00010C30
 struct adm_cmd_memory_map{
 	struct apr_hdr	hdr;
@@ -758,6 +764,7 @@ struct adm_copp_open_respond {
 } __attribute__ ((packed));
 
 #define ADM_CMDRSP_MULTI_CHANNEL_COPP_OPEN               0x00010311
+#define ADM_CMDRSP_MULTI_CHANNEL_COPP_OPEN_V2            0x0001031A
 #define ADM_CMDRSP_MULTI_CHANNEL_COPP_OPEN_V3            0x00010334
 
 
@@ -1206,6 +1213,16 @@ struct asm_stream_cmd_open_write {
 	u32            post_proc_top;
 	u32            format;
 } __attribute__((packed));
+
+#define ASM_STREAM_CMD_OPEN_WRITE_V2                     0x00010D8F
+struct asm_stream_cmd_open_write_v2 {
+	struct apr_hdr hdr;
+	u32            uMode;
+	u16            sink_endpoint;
+	u16            bits_per_sample;
+	u32            post_proc_top;
+	u32            format;
+} __packed;
 
 #define IEC_61937_MASK	0x00000001
 #define IEC_60958_MASK	0x00000002

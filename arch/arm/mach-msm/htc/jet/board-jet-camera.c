@@ -19,7 +19,7 @@
 #include <mach/gpiomux.h>
 #include <asm/setup.h>
 
-#include "devices.h"
+#include "../../devices.h"
 #include "board-jet.h"
 
 #include <linux/spi/spi.h>

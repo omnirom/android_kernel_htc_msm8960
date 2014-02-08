@@ -20,9 +20,9 @@
 #include <asm/mach/mmc.h>
 #include <mach/board.h>
 #include <mach/gpiomux.h>
-#include "devices.h"
+#include "../../devices.h"
 #include "board-jet.h"
-#include "board-storage-common-a.h"
+#include "../../board-storage-common-a.h"
 
 /* MSM8960 has 5 SDCC controllers */
 enum sdcc_controllers {

@@ -297,16 +297,6 @@ config MMC_ATMELMCI
 
 endchoice
 
-config MMC_ATMELMCI_DMA
-	bool "Atmel MCI DMA support"
-	depends on MMC_ATMELMCI && (AVR32 || ARCH_AT91SAM9G45) && DMA_ENGINE
-	help
-	  Say Y here to have the Atmel MCI driver use a DMA engine to
-	  do data transfers and thus increase the throughput and
-	  reduce the CPU utilization.
-
-	  If unsure, say N.
-
 config MMC_IMX
 	tristate "Motorola i.MX Multimedia Card Interface support"
 	depends on ARCH_MX1
@@ -517,6 +507,13 @@ config MMC_MSM_SDC3_WP_SUPPORT
 	default n
 	help
 	  Select Y to enable write protection support for Slot 3.
+
+config MMC_MSM_SDC3_PAD_PWR_SWITCH
+	boolean "Qualcomm SDC3 enable pad_pwr_switch (HTC SDIO WiFi)"
+	depends on MMC_MSM_SDC3_SUPPORT
+	default n
+	help
+	  Select Y to enable pad_pwr_switch for HTC SDIO WiFi
 
 config MMC_MSM_SDC4_SUPPORT
 	boolean "Qualcomm SDC4 support"
