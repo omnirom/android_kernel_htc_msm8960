@@ -11,9 +11,9 @@
  *
  */
 
-#include "../../../../drivers/video/msm/msm_fb.h"
-#include "../../../../drivers/video/msm/mipi_dsi.h"
-#include "../../../../drivers/video/msm/mdp4.h"
+#include "../../../../../../drivers/video/msm/msm_fb.h"
+#include "../../../../../../drivers/video/msm/mipi_dsi.h"
+#include "../../../../../../drivers/video/msm/mdp4.h"
 #include <linux/gpio.h>
 #include <mach/gpio.h>
 #include <mach/panel_id.h>
@@ -23,13 +23,17 @@
 #include <video/msm_hdmi_modes.h>
 #endif
 
-#include "../devices.h"
+#include "../../../devices.h"
 #include "../board-jet.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
-#define MSM_FB_PRIM_BUF_SIZE (1280 * 720 * 4 * 3) /* 4bpp x 3 pages */
+#define MSM_FB_PRIM_BUF_SIZE \
+      (roundup((roundup(1280, 32) * roundup(720, 32) * 4), 4096) * 3)
+
 #else
-#define MSM_FB_PRIM_BUF_SIZE (1280 * 720 * 4 * 3) /* 4bb x 2 pages */
+#define MSM_FB_PRIM_BUF_SIZE \
+      (roundup((roundup(1280, 32) * roundup(720, 32) * 4), 4096) * 2)
+
 #endif
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL

@@ -25,8 +25,8 @@
 
 #define RMNET_DATA_LEN			2000
 #define RMNET_HEADROOM_W_MUX		(sizeof(struct mux_hdr) + \
-					sizeof(struct QMI_QOS_HDR_S))
-#define RMNET_HEADROOM			sizeof(struct QMI_QOS_HDR_S)
+					sizeof(struct QMI_QOS_ALIGNED_HDR_S))
+#define RMNET_HEADROOM			sizeof(struct QMI_QOS_ALIGNED_HDR_S)
 #define RMNET_TAILROOM			MAX_PAD_BYTES(4);
 
 static unsigned int no_rmnet_devs = 1;
@@ -360,8 +360,13 @@ static struct sk_buff *rmnet_usb_tx_fixup(struct usbnet *dev,
 	struct QMI_QOS_HDR_S	*qmih;
 
 	if (test_bit(RMNET_MODE_QOS, &dev->data[0])) {
-		qmih = (struct QMI_QOS_HDR_S *)
-		skb_push(skb, sizeof(struct QMI_QOS_HDR_S));
+		if (test_bit(RMNET_MODE_ALIGNED_QOS, &dev->data[0])) {
+			qmih = (struct QMI_QOS_HDR_S *)
+			skb_push(skb, sizeof(struct QMI_QOS_ALIGNED_HDR_S));
+		} else {
+			qmih = (struct QMI_QOS_HDR_S *)
+			skb_push(skb, sizeof(struct QMI_QOS_HDR_S));
+		}
 		qmih->version = 1;
 		qmih->flags = 0;
 		qmih->flow_id = skb->mark;
@@ -536,6 +541,12 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		ifr->ifr_ifru.ifru_data = (void *)(unet->data[0]
 						& (RMNET_MODE_LLP_ETH
 						| RMNET_MODE_LLP_IP));
+		break;
+
+	case RMNET_IOCTL_SET_ALIGNED_QOS_ENABLE:  /* Set QoS Aligned header */
+		set_bit(RMNET_MODE_ALIGNED_QOS, &unet->data[0]);
+		DBG0("[%s] rmnet_ioctl(): set QMI QOS Aligned header enable\n",
+				dev->name);
 		break;
 
 	case RMNET_IOCTL_SET_QOS_ENABLE:	/* Set QoS header enabled*/
@@ -772,7 +783,7 @@ static int rmnet_usb_probe(struct usb_interface *iface,
 		device_set_wakeup_enable(&udev->parent->dev, 1);
 
 		/* set default autosuspend timeout for modem and roothub */
-		pm_runtime_set_autosuspend_delay(&udev->dev, 1000);
+		pm_runtime_set_autosuspend_delay(&udev->dev, 2000);
 		pm_runtime_set_autosuspend_delay(&udev->parent->dev, 200);
 	}
 

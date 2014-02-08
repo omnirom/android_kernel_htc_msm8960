@@ -27,7 +27,9 @@
 #include <linux/workqueue.h>
 #include <linux/jiffies.h>
 #include <linux/wakelock.h>
+#ifdef CONFIG_MACH_HTC
 #include <linux/delay.h>
+#endif
 
 #include <asm/uaccess.h>
 #include <asm/setup.h>
@@ -362,9 +364,10 @@ void *pil_get(const char *name)
 	struct pil_device *pil;
 	struct pil_device *pil_d;
 	void *retval;
+#ifdef CONFIG_MACH_HTC
 	static int modem_initialized = 0;
 	int loop_count = 0;
-	static int loop_max = 20;
+#endif
 
 	if (!name)
 		return NULL;
@@ -383,20 +386,21 @@ void *pil_get(const char *name)
 		goto err_depends;
 	}
 
-	// Wait up to 5 seconds (20*250ms) for rmt_storage
+#ifdef CONFIG_MACH_HTC
 	if (!strcmp("modem", name)) {
-		while (unlikely(!modem_initialized && strcmp("rmt_storage", current->comm) && loop_count++ < loop_max)) {
-			printk("%s: %s(%d) waiting on rmt_storage %d\n", __func__, current->comm, current->pid, loop_max-loop_count+1);
-			msleep(250);
+		while (!modem_initialized &&
+				strcmp("rmt_storage", current->comm) &&
+				loop_count++ < 10) {
+			msleep(500);
 		}
 	}
-
+#endif
 	mutex_lock(&pil->lock);
 	if (!pil->count) {
-		if (!strcmp("modem", name)) {
-			printk("%s: %s(%d) for %s\n", __func__, current->comm, current->pid, name);
+#ifdef CONFIG_MACH_HTC
+		if (!strcmp("modem", name))
 			modem_initialized = 1;
-		}
+#endif
 		ret = load_image(pil);
 		if (ret) {
 			retval = ERR_PTR(ret);
@@ -444,8 +448,6 @@ void pil_put(void *peripheral_handle)
 		return;
 
 	mutex_lock(&pil->lock);
-
-	printk("%s: %s(%d) for %s\n", __func__, current->comm, current->pid, pil->desc->name);
 	if (WARN(!pil->count, "%s: %s: Reference count mismatch\n",
 			pil->desc->name, __func__))
 		goto err_out;
